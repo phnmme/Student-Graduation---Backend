@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,28 +7,16 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  USER
-  ADMIN
-  OWNER
-}
-
-enum EmploymentSector {
-  PRIVATE
-  GOVERNMENT
-}
-
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String
-  role      Role     @default(USER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  profile       StudentProfile?
-  logs          Log[]
+  id            Int             @id @default(autoincrement())
+  email         String          @unique
+  password      String
+  role          Role            @default(USER)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
   careerReviews CareerReview[]
+  logs          Log[]
+  profile       StudentProfile?
 }
 
 model StudentProfile {
@@ -47,22 +29,20 @@ model StudentProfile {
   entryYear           Int
   gradYear            Int?
   jobField            String?
+  userId              Int               @unique
+  updatedAt           DateTime          @updatedAt
   continued_from_coop Boolean           @default(false)
   employment_sector   EmploymentSector?
-  userId              Int               @unique
   user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  updatedAt           DateTime          @updatedAt
 }
 
 model Log {
-  id      Int     @id @default(autoincrement())
-  action  String
-  details String?
-
-  userId Int?
-  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-
+  id        Int      @id @default(autoincrement())
+  action    String
+  details   String?
+  userId    Int?
   createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
 }
 
 model JwtBlacklist {
@@ -72,17 +52,28 @@ model JwtBlacklist {
 }
 
 model CareerReview {
-  id          Int     @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   title       String
   description String
   jobField    String?
-  status      String  @default("pending")
-
-  userId Int
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  userId      Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  status      String   @default("pending")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+enum Role {
+  USER
+  ADMIN
+  OWNER
+}
+
+enum EmploymentSector {
+  PRIVATE
+  GOVERNMENT
+  STATE_ENTERPRISE
+  SELF_EMPLOYED
 }

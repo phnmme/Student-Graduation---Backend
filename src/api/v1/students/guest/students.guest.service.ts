@@ -1,126 +1,151 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
 export class studentsGuestService {
   async getAllYear() {
     const years = await prisma.studentProfile.findMany({
-      select: {
-        gradYear: true,
-      },
-      where: {
-        gradYear: {
-          not: null,
-        },
-      },
+      select: { gradYear: true },
+      where: { gradYear: { not: null } },
       distinct: ["gradYear"],
-      orderBy: {
-        gradYear: "desc",
-      },
+      orderBy: { gradYear: "desc" },
     });
 
     if (years.length === 0) {
-      return {
-        message: "ไม่พบข้อมูลปีการศึกษา",
-      };
+      return { message: "ไม่พบข้อมูลปีการศึกษา", data: { years: [] } };
     }
+
     return {
       message: "ดึงข้อมูลปีการศึกษาสำเร็จ",
-      data: {
-        years: years.map((y) => y.gradYear),
-      },
+      data: { years: years.map((y) => y.gradYear) },
     };
   }
-  async getStudentByYear(year: number | "all", skip = 0, limit = 10) {
-    // =========================
-    // CASE: year = all
-    // =========================
-    if (year === "all") {
-      const years = await prisma.studentProfile.findMany({
-        select: { gradYear: true },
-        where: { gradYear: { not: null } },
-        distinct: ["gradYear"],
-        orderBy: { gradYear: "asc" },
-      });
 
-      const gradYears = years.map((y) => y.gradYear!);
+  async getAllStudentsGrouped() {
+    const years = await prisma.studentProfile.findMany({
+      select: { gradYear: true },
+      where: { gradYear: { not: null } },
+      distinct: ["gradYear"],
+      orderBy: { gradYear: "desc" },
+    });
 
-      const counts = await prisma.studentProfile.groupBy({
-        by: ["gradYear"],
-        _count: {
-          gradYear: true,
-        },
-      });
+    const gradYears = years.map((y) => y.gradYear!);
 
-      const countMap = counts.reduce((acc, item) => {
-        acc[item.gradYear!] = item._count.gradYear;
-        return acc;
-      }, {} as Record<number, number>);
+    const counts = await prisma.studentProfile.groupBy({
+      by: ["gradYear"],
+      _count: { gradYear: true },
+    });
 
-      const result = await Promise.all(
-        gradYears.map(async (y) => {
-          const students = await prisma.studentProfile.findMany({
-            where: { gradYear: y },
-            take: 10,
-            orderBy: { updatedAt: "desc" },
-          });
+    const countMap = counts.reduce((acc, item) => {
+      acc[item.gradYear!] = item._count.gradYear;
+      return acc;
+    }, {} as Record<number, number>);
 
-          return {
-            gradYear: y,
-            count: countMap[y] || 0,
-            students,
-          };
-        })
-      );
+    const groups = await Promise.all(
+      gradYears.map(async (y) => {
+        const total = await prisma.studentProfile.count({
+          where: { gradYear: y },
+        });
 
-      return result;
-    }
+        const students = await prisma.studentProfile.findMany({
+          where: { gradYear: y },
+          take: 10,
+          orderBy: { updatedAt: "desc" },
+          select: {
+            id: true,
+            studentCode: true,
+            firstNameTh: true,
+            lastNameTh: true,
+            department: true,
+            entryYear: true,
+            gradYear: true,
+            jobField: true,
+          },
+        });
 
-    // =========================
-    // CASE: year = specific
-    // =========================
+        return {
+          gradYear: y,
+          count: total,
+          students,
+          nextSkip: students.length,
+          hasMore: students.length < total,
+        };
+      })
+    );
 
-    // นับทั้งหมดของปีนั้น
+    return {
+      message: "ดึงข้อมูลนักศึกษาทั้งหมดสำเร็จ",
+      data: { groups },
+    };
+  }
+
+  async getStudentByYear(year: number, search = "", skip = 0, limit = 10) {
+    const where: Prisma.StudentProfileWhereInput = {
+      gradYear: year,
+      ...(search && {
+        OR: [
+          {
+            studentCode: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+          {
+            firstNameTh: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+          {
+            lastNameTh: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+          {
+            department: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+          {
+            jobField: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        ],
+      }),
+    };
+
     const total = await prisma.studentProfile.count({
-      where: { gradYear: year },
+      where,
     });
 
     const students = await prisma.studentProfile.findMany({
-      where: {
-        gradYear: year,
-      },
+      where,
       skip,
       take: limit,
-      orderBy: { id: "asc" },
+      orderBy: {
+        updatedAt: "desc",
+      },
       select: {
         id: true,
         studentCode: true,
         firstNameTh: true,
         lastNameTh: true,
-        phoneNumber: true,
         department: true,
         entryYear: true,
         gradYear: true,
         jobField: true,
-        userId: true,
-        updatedAt: true,
-        user: {
-          select: {
-            id: true,
-            email: true,
-            role: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        },
       },
     });
 
     return {
-      message: "ดึงข้อมูลนักศึกษาปีการศึกษาสำเร็จ",
+      message: "ดึงข้อมูลนักศึกษาสำเร็จ",
       data: {
         gradYear: year,
-        total,
+        count: total,
         students,
         nextSkip: skip + students.length,
         hasMore: skip + students.length < total,

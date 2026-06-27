@@ -1,95 +1,151 @@
-// src/api/v1/user/user.service.ts
+// src/api/v1/user/users.authorized.service.ts
 
-import { Context } from "elysia";
+import type { Context } from "elysia";
 import { PrismaClient } from "@prisma/client";
 import { requireAdmin } from "../../shared/auth.helper";
 
 const prisma = new PrismaClient();
 
-// สร้าง temp password แบบ random
-function generateTempPassword(length = 12): string {
-  const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#$!";
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const TEMP_PASSWORD_LENGTH = 12;
+const TEMP_PASSWORD_CHARS =
+  "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#$!";
+
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface GetUsersQuery {
+  search?: string;
+  role?: string;
+  hasProfile?: string;
+  page?: string;
+  limit?: string;
+}
+
+type JwtContext = Context["jwt"] extends undefined ? never : any;
+type SetContext = Context["set"];
+type HeadersContext = Context["headers"];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function generateTempPassword(length = TEMP_PASSWORD_LENGTH): string {
   return Array.from(
     { length },
-    () => chars[Math.floor(Math.random() * chars.length)]
+    () =>
+      TEMP_PASSWORD_CHARS[
+        Math.floor(Math.random() * TEMP_PASSWORD_CHARS.length)
+      ]
   ).join("");
 }
 
-export class userService {
-  // GET /api/v1/user/users?search=&role=&hasProfile=&page=&limit=
-  // ดึงรายชื่อ user ทั้งหมด (เฉพาะ Admin)
-  async getUsers(
-    query: {
-      search?: string;
-      role?: string;
-      hasProfile?: string;
-      page?: string;
-      limit?: string;
+function buildUserWhereClause(query: GetUsersQuery) {
+  const where: Record<string, unknown> = {};
+
+  if (query.search) {
+    where.OR = [
+      { email: { contains: query.search, mode: "insensitive" } },
+      {
+        profile: {
+          OR: [
+            {
+              firstNameTh: { contains: query.search, mode: "insensitive" },
+            },
+            {
+              lastNameTh: { contains: query.search, mode: "insensitive" },
+            },
+            {
+              studentCode: { contains: query.search, mode: "insensitive" },
+            },
+          ],
+        },
+      },
+    ];
+  }
+
+  if (query.role && query.role !== "all") {
+    where.role = query.role.toUpperCase();
+  }
+
+  if (query.hasProfile === "with") {
+    where.profile = { isNot: null };
+  } else if (query.hasProfile === "without") {
+    where.profile = { is: null };
+  }
+
+  return where;
+}
+
+function parsePagination(query: GetUsersQuery) {
+  const page = Math.max(DEFAULT_PAGE, Number(query.page) || DEFAULT_PAGE);
+  const limit = Math.min(MAX_LIMIT, Number(query.limit) || DEFAULT_LIMIT);
+  return { page, limit, skip: (page - 1) * limit };
+}
+
+// ─── Prisma select shapes ─────────────────────────────────────────────────────
+
+const USER_LIST_SELECT = {
+  id: true,
+  email: true,
+  role: true,
+  createdAt: true,
+  updatedAt: true,
+  profile: {
+    select: {
+      id: true,
+      studentCode: true,
+      firstNameTh: true,
+      lastNameTh: true,
+      phoneNumber: true,
+      department: true,
+      entryYear: true,
+      gradYear: true,
+      jobField: true,
+      continued_from_coop: true,
+      employment_sector: true,
     },
-    jwt: any,
-    set: Context["set"],
-    headers: Context["headers"]
+  },
+} as const;
+
+const USER_DETAIL_SELECT = {
+  id: true,
+  email: true,
+  role: true,
+  createdAt: true,
+  updatedAt: true,
+  profile: true,
+  _count: {
+    select: { logs: true, careerReviews: true },
+  },
+} as const;
+
+// ─── Service ──────────────────────────────────────────────────────────────────
+
+export class UserService {
+  /**
+   * GET /api/v1/user/authorized/users
+   * ดึงรายชื่อผู้ใช้ทั้งหมด (เฉพาะ Admin)
+   */
+  async getUsers(
+    query: GetUsersQuery,
+    jwt: JwtContext,
+    set: SetContext,
+    headers: HeadersContext
   ) {
     const decoded = await requireAdmin(jwt, set, headers);
     if (!decoded) return { message: "ไม่มีสิทธิ์เข้าถึง" };
 
-    const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.min(100, Number(query.limit) || 20);
-    const skip = (page - 1) * limit;
-
-    const where: any = {};
-
-    if (query.search) {
-      where.OR = [
-        { email: { contains: query.search, mode: "insensitive" } },
-        {
-          profile: {
-            OR: [
-              { firstNameTh: { contains: query.search, mode: "insensitive" } },
-              { lastNameTh: { contains: query.search, mode: "insensitive" } },
-              { studentCode: { contains: query.search, mode: "insensitive" } },
-            ],
-          },
-        },
-      ];
-    }
-
-    if (query.role && query.role !== "all") {
-      where.role = query.role.toUpperCase();
-    }
-
-    if (query.hasProfile === "with") {
-      where.profile = { isNot: null };
-    } else if (query.hasProfile === "without") {
-      where.profile = { is: null };
-    }
+    const { page, limit, skip } = parsePagination(query);
+    const where = buildUserWhereClause(query);
 
     const [total, users] = await Promise.all([
       prisma.user.count({ where }),
       prisma.user.findMany({
         where,
-        select: {
-          id: true,
-          email: true,
-          role: true,
-          createdAt: true,
-          updatedAt: true,
-          profile: {
-            select: {
-              id: true,
-              studentCode: true,
-              firstNameTh: true,
-              lastNameTh: true,
-              phoneNumber: true,
-              department: true,
-              entryYear: true,
-              gradYear: true,
-              jobField: true,
-              continued_from_coop: true,
-              employment_sector: true,
-            },
-          },
-        },
+        select: USER_LIST_SELECT,
         orderBy: { createdAt: "desc" },
         skip,
         take: limit,
@@ -108,30 +164,22 @@ export class userService {
     };
   }
 
-  // GET /api/v1/user/users/:id
-  // ดูข้อมูล user รายบุคคล
+  /**
+   * GET /api/v1/user/authorized/users/:id
+   * ดูข้อมูลผู้ใช้รายบุคคล
+   */
   async getUserById(
     id: number,
-    jwt: any,
-    set: Context["set"],
-    headers: Context["headers"]
+    jwt: JwtContext,
+    set: SetContext,
+    headers: HeadersContext
   ) {
     const decoded = await requireAdmin(jwt, set, headers);
     if (!decoded) return { message: "ไม่มีสิทธิ์เข้าถึง" };
 
     const user = await prisma.user.findUnique({
       where: { id },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-        profile: true,
-        _count: {
-          select: { logs: true, careerReviews: true },
-        },
-      },
+      select: USER_DETAIL_SELECT,
     });
 
     if (!user) {
@@ -142,19 +190,23 @@ export class userService {
     return { message: "ข้อมูลผู้ใช้", data: user };
   }
 
-  // DELETE /api/v1/user/users/:id
-  // ลบ user (เฉพาะ Admin/Owner ลบ User ได้, Owner ลบ Admin ได้)
+  /**
+   * DELETE /api/v1/user/authorized/users/:id
+   * ลบบัญชีผู้ใช้ (Admin ลบ User ได้, Owner ลบ Admin ได้)
+   */
   async deleteUser(
     id: number,
-    jwt: any,
-    set: Context["set"],
-    headers: Context["headers"]
+    jwt: JwtContext,
+    set: SetContext,
+    headers: HeadersContext
   ) {
     const decoded = await requireAdmin(jwt, set, headers);
     if (!decoded) return { message: "ไม่มีสิทธิ์เข้าถึง" };
 
-    const caller = await prisma.user.findUnique({ where: { id: decoded.id } });
-    const target = await prisma.user.findUnique({ where: { id } });
+    const [caller, target] = await Promise.all([
+      prisma.user.findUnique({ where: { id: decoded.id } }),
+      prisma.user.findUnique({ where: { id } }),
+    ]);
 
     if (!target) {
       set.status = 404;
@@ -189,18 +241,21 @@ export class userService {
     return { message: "ลบผู้ใช้สำเร็จ" };
   }
 
-  // POST /api/v1/user/users/:id/reset-password
-  // สร้าง Temp Password และ hash เก็บลง DB (Admin เท่านั้น)
+  /**
+   * POST /api/v1/user/authorized/users/:id/reset-password
+   * สร้าง Temp Password และ hash เก็บใน DB (เฉพาะ Admin)
+   */
   async resetPassword(
     id: number,
-    jwt: any,
-    set: Context["set"],
-    headers: Context["headers"]
+    jwt: JwtContext,
+    set: SetContext,
+    headers: HeadersContext
   ) {
     const decoded = await requireAdmin(jwt, set, headers);
     if (!decoded) return { message: "ไม่มีสิทธิ์เข้าถึง" };
 
     const target = await prisma.user.findUnique({ where: { id } });
+
     if (!target) {
       set.status = 404;
       return { message: "ไม่พบผู้ใช้" };
@@ -212,31 +267,30 @@ export class userService {
     }
 
     const tempPassword = generateTempPassword();
-
-    // Hash password ด้วย Bun built-in (หรือใช้ bcrypt ถ้าต้องการ)
     const hashed = await Bun.password.hash(tempPassword, {
       algorithm: "bcrypt",
       cost: 10,
     });
 
-    await prisma.user.update({
-      where: { id },
-      data: { password: hashed },
-    });
-
-    await prisma.log.create({
-      data: {
-        action: "PASSWORD_RESET",
-        details: `รีเซ็ตรหัสผ่านของ ${target.email} โดย Admin`,
-        userId: decoded.id,
-      },
-    });
+    await Promise.all([
+      prisma.user.update({
+        where: { id },
+        data: { password: hashed },
+      }),
+      prisma.log.create({
+        data: {
+          action: "PASSWORD_RESET",
+          details: `รีเซ็ตรหัสผ่านของ ${target.email} โดย Admin (ID #${decoded.id})`,
+          userId: decoded.id,
+        },
+      }),
+    ]);
 
     return {
       message: "รีเซ็ตรหัสผ่านสำเร็จ",
       data: {
-        tempPassword, // ส่งให้ Admin copy ไปแจ้ง user
-        expiresIn: "24h", // แนะนำให้ user เปลี่ยนรหัสใหม่ทันที
+        tempPassword,
+        expiresIn: "24h",
         userId: id,
         email: target.email,
       },
