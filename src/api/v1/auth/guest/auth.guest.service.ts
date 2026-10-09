@@ -23,7 +23,7 @@ export class AuthGuestService {
       set.status = 401;
       return {
         success: false,
-        message: "ไม่พบผู้ใช้ที่มีอีเมลนี้",
+        message: "อีเมลหรือรหัสผ่านไม่ถูกต้อง",
       };
     }
 
@@ -33,7 +33,16 @@ export class AuthGuestService {
       set.status = 401;
       return {
         success: false,
-        message: "รหัสผ่านไม่ถูกต้อง",
+        message: "อีเมลหรือรหัสผ่านไม่ถูกต้อง",
+      };
+    }
+
+    if (user.tempPasswordExpiresAt && user.tempPasswordExpiresAt.getTime() <= Date.now()) {
+      set.status = 401;
+      return {
+        success: false,
+        code: "TEMP_PASSWORD_EXPIRED",
+        message: "รหัสผ่านชั่วคราวหมดอายุแล้ว กรุณาติดต่อผู้ดูแลระบบเพื่อรีเซ็ตรหัสผ่านอีกครั้ง",
       };
     }
 

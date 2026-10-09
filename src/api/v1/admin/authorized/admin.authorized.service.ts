@@ -147,6 +147,11 @@ export class AdminAuthorizedService {
       return notFound(set, "ไม่พบผู้ใช้");
     }
 
+    if (target.id === decoded.id) {
+      set.status = 400;
+      return { message: "ไม่สามารถถอดสิทธิ์ของบัญชีตัวเองได้" };
+    }
+
     if (target.role === "OWNER") {
       return forbidden(set, "ไม่สามารถถอดสิทธิ์ OWNER ได้");
     }

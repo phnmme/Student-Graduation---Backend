@@ -1,5 +1,6 @@
 // src/api/v1/log/log.controller.ts
 
+import { getJwtSecret } from "../../../../utils/jwtSecret";
 import { Elysia, t } from "elysia";
 import { jwt } from "@elysiajs/jwt";
 import { logService } from "./logs.authorized.service";
@@ -10,7 +11,7 @@ export const logController = new Elysia()
   .use(
     jwt({
       name: "jwt",
-      secret: process.env.JWT_SECRET || "your-secret-key",
+      secret: getJwtSecret(),
     })
   )
   .group("/api/v1/log/authorized", (app) => {

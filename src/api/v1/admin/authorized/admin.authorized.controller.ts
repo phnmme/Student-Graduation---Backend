@@ -1,5 +1,6 @@
 // src/api/v1/admin/admin.authorized.controller.ts
 
+import { getJwtSecret } from "../../../../utils/jwtSecret";
 import { Elysia, t } from "elysia";
 import { jwt } from "@elysiajs/jwt";
 import { AdminAuthorizedService } from "./admin.authorized.service";
@@ -8,7 +9,7 @@ const service = new AdminAuthorizedService();
 
 const jwtPlugin = jwt({
   name: "jwt",
-  secret: process.env.JWT_SECRET ?? "your-secret-key",
+  secret: getJwtSecret(),
 });
 
 export const adminController = new Elysia()

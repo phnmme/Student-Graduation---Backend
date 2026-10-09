@@ -9,6 +9,7 @@ import { statisticsGuestController } from "./api/v1/statistics/guest/statistics.
 import { adminController } from "./api/v1/admin/authorized/admin.authorized.controller";
 import { logController } from "./api/v1/logs/authorized/logs.authorized.controller";
 import { reviewController } from "./api/v1/reviews/authorized/reviews.authorized.controller";
+import { reviewGuestController } from "./api/v1/reviews/guest/reviews.guest.controller";
 import { userController } from "./api/v1/users/authorized/users.authorized.controller";
 
 const app = new Elysia()
@@ -31,6 +32,7 @@ const app = new Elysia()
   .use(statisticsGuestController)
   .use(adminController)
   .use(logController)
+  .use(reviewGuestController)
   .use(reviewController)
   .use(userController)
   .listen(4000);

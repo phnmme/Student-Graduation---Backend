@@ -8,36 +8,52 @@ const prisma = new PrismaClient();
 export class authAuthorizedService {
   async getMe(jwt: any, set: Context["set"], headers: Context["headers"]) {
     const auth = headers["authorization"];
-    if (!auth) {
+    if (!auth?.startsWith("Bearer ")) {
       set.status = 401;
-      return {
-        message: "ไม่มีสิทธิ์เข้าถึง",
-      };
+      return { message: "ไม่มีสิทธิ์เข้าถึง" };
     }
 
-    const token = auth.split(" ")[1];
+    const token = auth.slice("Bearer ".length).trim();
+    if (!token) {
+      set.status = 401;
+      return { message: "โทเค็นไม่ถูกต้อง" };
+    }
+
     try {
-      const decoded = await jwt.verify(token);
-      if (!decoded || typeof decoded === "string") {
+      const decoded = (await jwt.verify(token)) as { id?: number } | false;
+      if (!decoded || typeof decoded !== "object" || !decoded.id) {
         set.status = 401;
-        return {
-          message: "โทเค็นไม่ถูกต้อง",
-        };
+        return { message: "โทเค็นไม่ถูกต้อง" };
       }
+
+      // Read current role/profile from DB so role changes take effect immediately.
+      const user = await prisma.user.findUnique({
+        where: { id: Number(decoded.id) },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          profile: { select: { firstNameTh: true, lastNameTh: true } },
+        },
+      });
+
+      if (!user) {
+        set.status = 401;
+        return { message: "ผู้ใช้ไม่ถูกต้อง" };
+      }
+
       return {
         message: "ข้อมูลผู้ใช้",
         data: {
-          id: decoded.id,
-          email: decoded.email,
-          name: decoded.name,
-          role: decoded.role,
+          id: user.id,
+          email: user.email,
+          name: [user.profile?.firstNameTh, user.profile?.lastNameTh].filter(Boolean).join(" "),
+          role: user.role,
         },
       };
-    } catch (error) {
+    } catch {
       set.status = 401;
-      return {
-        message: "โทเค็นไม่ถูกต้อง",
-      };
+      return { message: "โทเค็นไม่ถูกต้อง" };
     }
   }
   async verifyToken(
@@ -69,6 +85,7 @@ export class authAuthorizedService {
 
       const user = await prisma.user.findUnique({
         where: { id: decoded.id },
+        select: { id: true, email: true, role: true },
       });
 
       if (!user) {

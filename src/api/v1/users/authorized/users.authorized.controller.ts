@@ -1,5 +1,6 @@
 // src/api/v1/user/users.authorized.controller.ts
 
+import { getJwtSecret } from "../../../../utils/jwtSecret";
 import { Elysia } from "elysia";
 import { jwt } from "@elysiajs/jwt";
 import { UserService } from "./users.authorized.service";
@@ -8,7 +9,7 @@ const service = new UserService();
 
 const jwtPlugin = jwt({
   name: "jwt",
-  secret: process.env.JWT_SECRET ?? "your-secret-key",
+  secret: getJwtSecret(),
 });
 
 export const userController = new Elysia()

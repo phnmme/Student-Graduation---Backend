@@ -14,6 +14,7 @@ interface GetReviewsQuery {
   status?: string;
   search?: string;
   jobField?: string;
+  category?: string;
   page?: string;
   limit?: string;
 }
@@ -22,6 +23,7 @@ interface CreateReviewBody {
   title: string;
   description: string;
   jobField?: string;
+  category?: "CAREER_PREP" | "CURRICULUM_IMPROVEMENT";
 }
 
 interface UpdateStatusBody {
@@ -104,6 +106,10 @@ export class ReviewService {
       where.jobField = { equals: query.jobField, mode: "insensitive" };
     }
 
+    if (query.category === "CAREER_PREP" || query.category === "CURRICULUM_IMPROVEMENT") {
+      where.category = query.category;
+    }
+
     const [total, reviews] = await Promise.all([
       prisma.careerReview.count({ where }),
       prisma.careerReview.findMany({
@@ -180,6 +186,7 @@ export class ReviewService {
         title: body.title,
         description: body.description,
         jobField: body.jobField,
+        category: body.category ?? "CAREER_PREP",
         userId: decoded.id,
       },
     });

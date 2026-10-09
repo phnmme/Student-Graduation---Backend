@@ -8,32 +8,50 @@ datasource db {
 }
 
 model User {
-  id            Int             @id @default(autoincrement())
-  email         String          @unique
-  password      String
-  role          Role            @default(USER)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id                    Int             @id @default(autoincrement())
+  email                 String          @unique
+  password              String
+  tempPasswordExpiresAt DateTime?
+  role                  Role            @default(USER)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
   careerReviews CareerReview[]
   logs          Log[]
   profile       StudentProfile?
 }
 
 model StudentProfile {
-  id                  Int               @id @default(autoincrement())
-  studentCode         String            @unique
+  id                  Int                @id @default(autoincrement())
+  studentCode         String             @unique
   firstNameTh         String
   lastNameTh          String
   phoneNumber         String?
-  department          String            @default("การจัดการเทคโนโลยีสารการผลิตและสารสนเทศ")
+  department          String             @default("การจัดการเทคโนโลยีสารการผลิตและสารสนเทศ")
   entryYear           Int
   gradYear            Int?
   jobField            String?
-  userId              Int               @unique
-  updatedAt           DateTime          @updatedAt
-  continued_from_coop Boolean           @default(false)
+  companyName         String?
+  jobStartYear        Int?
+  userId              Int                @unique
+  updatedAt           DateTime           @updatedAt
+  continued_from_coop Boolean            @default(false)
   employment_sector   EmploymentSector?
-  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employmentHistory   EmploymentHistory[]
+}
+
+model EmploymentHistory {
+  id          Int            @id @default(autoincrement())
+  profileId   Int
+  jobTitle    String         @db.VarChar(150)
+  companyName String?        @db.VarChar(150)
+  startYear   Int?
+  endYear     Int?
+  description String?        @db.VarChar(1000)
+  createdAt   DateTime       @default(now())
+  profile     StudentProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
 }
 
 model Log {
@@ -52,17 +70,26 @@ model JwtBlacklist {
 }
 
 model CareerReview {
-  id          Int      @id @default(autoincrement())
+  id          Int            @id @default(autoincrement())
   title       String
   description String
   jobField    String?
+  category    ReviewCategory @default(CAREER_PREP)
   userId      Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  status      String   @default("pending")
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  status      String         @default("pending")
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// ประเภทของคำแนะนำและรีวิว
+// CAREER_PREP = เตรียมความพร้อมก่อนเริ่มทำงาน
+// CURRICULUM_IMPROVEMENT = ข้อเสนอแนะเพื่อพัฒนาหลักสูตร
+ enum ReviewCategory {
+  CAREER_PREP
+  CURRICULUM_IMPROVEMENT
 }
 
 enum Role {

@@ -1,6 +1,7 @@
 // src/api/v1/user/users.authorized.service.ts
 
 import type { Context } from "elysia";
+import { randomInt } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { requireAdmin } from "../../shared/auth.helper";
 
@@ -26,7 +27,7 @@ interface GetUsersQuery {
   limit?: string;
 }
 
-type JwtContext = Context["jwt"] extends undefined ? never : any;
+type JwtContext = any;
 type SetContext = Context["set"];
 type HeadersContext = Context["headers"];
 
@@ -35,10 +36,7 @@ type HeadersContext = Context["headers"];
 function generateTempPassword(length = TEMP_PASSWORD_LENGTH): string {
   return Array.from(
     { length },
-    () =>
-      TEMP_PASSWORD_CHARS[
-        Math.floor(Math.random() * TEMP_PASSWORD_CHARS.length)
-      ]
+    () => TEMP_PASSWORD_CHARS[randomInt(TEMP_PASSWORD_CHARS.length)]
   ).join("");
 }
 
@@ -266,6 +264,15 @@ export class UserService {
       return { message: "ไม่สามารถรีเซ็ตรหัสผ่านของ OWNER ได้" };
     }
 
+    const caller = await prisma.user.findUnique({
+      where: { id: decoded.id },
+      select: { role: true },
+    });
+    if (target.role === "ADMIN" && caller?.role !== "OWNER") {
+      set.status = 403;
+      return { message: "เฉพาะ OWNER เท่านั้นที่สามารถรีเซ็ตรหัสผ่าน Admin ได้" };
+    }
+
     const tempPassword = generateTempPassword();
     const hashed = await Bun.password.hash(tempPassword, {
       algorithm: "bcrypt",
@@ -275,7 +282,10 @@ export class UserService {
     await Promise.all([
       prisma.user.update({
         where: { id },
-        data: { password: hashed },
+        data: {
+          password: hashed,
+          tempPasswordExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
       }),
       prisma.log.create({
         data: {

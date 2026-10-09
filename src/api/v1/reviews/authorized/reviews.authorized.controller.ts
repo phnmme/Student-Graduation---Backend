@@ -1,5 +1,6 @@
 // src/api/v1/review/reviews.authorized.controller.ts
 
+import { getJwtSecret } from "../../../../utils/jwtSecret";
 import { Elysia, t } from "elysia";
 import { jwt } from "@elysiajs/jwt";
 import { ReviewService } from "./reviews.authorized.service";
@@ -12,11 +13,16 @@ const ReviewStatusSchema = t.Union([
   t.Literal("rejected"),
 ]);
 
+const ReviewCategorySchema = t.Union([
+  t.Literal("CAREER_PREP"),
+  t.Literal("CURRICULUM_IMPROVEMENT"),
+]);
+
 export const reviewController = new Elysia()
   .use(
     jwt({
       name: "jwt",
-      secret: process.env.JWT_SECRET || "your-secret-key",
+      secret: getJwtSecret(),
     })
   )
   .group("/api/v1/review/authorized", (app) =>
@@ -31,6 +37,7 @@ export const reviewController = new Elysia()
             status: t.Optional(t.String()),
             search: t.Optional(t.String()),
             jobField: t.Optional(t.String()),
+            category: t.Optional(t.String()),
             page: t.Optional(t.String()),
             limit: t.Optional(t.String()),
           }),
@@ -57,6 +64,7 @@ export const reviewController = new Elysia()
             title: t.String({ minLength: 1 }),
             description: t.String({ minLength: 1 }),
             jobField: t.Optional(t.String()),
+            category: t.Optional(ReviewCategorySchema),
           }),
         }
       )
